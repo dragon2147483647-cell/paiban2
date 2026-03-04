@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 智能排版 Demo</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* 优化滚动条样式，使其更加美观 */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ==========================================
+    // Mock Lucide Icons
+    // 为确保纯本地单文件运行不产生跨域报错，将所用图标替换为原生 SVG 组件
+    // ==========================================
+    const IconWrapper = ({ children, className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        {children}
+      </svg>
+    );
+    const ChevronLeft = ({ className }) => <IconWrapper className={className}><path d="m15 18-6-6 6-6"/></IconWrapper>;
+    const MoreHorizontal = ({ className }) => <IconWrapper className={className}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></IconWrapper>;
+    const CheckCircle2 = ({ className }) => <IconWrapper className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></IconWrapper>;
+    const Sparkles = ({ className }) => <IconWrapper className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></IconWrapper>;
+    const ClipboardPaste = ({ className }) => <IconWrapper className={className}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></IconWrapper>;
+    const X = ({ className }) => <IconWrapper className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconWrapper>;
+    const Loader2 = ({ className }) => <IconWrapper className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconWrapper>;
+
+    // ==========================================
+    // 原始代码区域
+    // ==========================================
+    const DUMMY_TEXT = `上个周末，爸爸妈妈带我去了动物园，那真是一次愉快的旅行！\n\n一进动物园，我就看到好多可爱的动物。长颈鹿伸着长长的脖子吃树叶，斑马身上有黑白条纹，像穿了一件漂亮的衣服。最有趣的是猴子，它们在树上跳来跳去，还做鬼脸逗我们笑。我还亲手喂了小山羊，它用软软的舌头舔我的手，痒痒的，我忍不住咯咯笑。\n\n中午，我们在草地上野餐。妈妈准备了美味的三明治和水果，我一边吃一边看孔雀开屏，它的羽毛像一把五彩的大扇子，美极了！\n\n下午，我们还去看了海豚表演。聪明的海豚会顶球、跳水，还会跟着音乐跳舞，观众们都使劲鼓掌。\n\n太阳下山了，我们才依依不舍地离开。这次旅行让我认识了许多动物，也学到了知识。我拉着爸爸妈妈的手说：“下次还要再来！”`;
+
+    const PREFERENCE_CATEGORIES = [
+      {
+        id: 'style',
+        title: '排版风格',
+        options: ['活泼生动', '自然清新', '严肃规范', '整齐划一']
+      },
+      {
+        id: 'spacing',
+        title: '排版要求',
+        options: ['常规间距', '宽松呼吸感', '紧凑信息流']
+      },
+      {
+        id: 'format',
+        title: '版式特征',
+        options: ['极简留白', '公文规范', '图文丰富']
+      },
+      {
+        id: 'scene',
+        title: '使用场景',
+        options: ['工作汇报', '生活记录', '学习笔记']
+      }
+    ];
+
+    const TEMPLATES = [
+      {
+        id: 'tpl-1',
+        name: '华文新魏',
+        desc: '具有浓厚的魏碑金石韵味，风格古朴典雅、苍劲有力。',
+        styleClass: 'font-serif text-[17px] leading-relaxed tracking-wide text-gray-800 indent-8'
+      },
+      {
+        id: 'tpl-2',
+        name: '清新楷体',
+        desc: '视觉上最接近规范的手写汉字，带有浓郁的书卷气与亲和力。',
+        styleClass: 'font-sans text-[16px] leading-loose text-gray-700 indent-8'
+      },
+      {
+        id: 'tpl-3',
+        name: '商务黑体',
+        desc: '结构严谨，线条干净利落，适合严肃、专业的工作场景。',
+        styleClass: 'font-sans text-[15px] leading-snug font-medium text-slate-900 indent-0 mb-4'
+      }
+    ];
+
+    function AILayoutDemo() {
+      // App States: 0=Initial, 1=PasteIntercept, 2=PreferenceSelection, 3=TemplateSelection
+      const [step, setStep] = useState(0);
+      const [text, setText] = useState('');
+      const [selectedPrefs, setSelectedPrefs] = useState({});
+      const [isProcessing, setIsProcessing] = useState(false);
+      const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+
+      // --- Handlers ---
+      const handleSimulatePaste = () => {
+        setText(DUMMY_TEXT);
+        setStep(1); // Show intercept dialog
+      };
+
+      const handleConfirmBeautify = () => {
+        setStep(2); // Go to preferences
+      };
+
+      const handleCancelBeautify = () => {
+        setStep(0); // Back to normal doc with pasted text
+      };
+
+      const togglePreference = (categoryId, option) => {
+        setSelectedPrefs(prev => ({
+          ...prev,
+          [categoryId]: prev[categoryId] === option ? null : option // Toggle selection
+        }));
+      };
+
+      const handleStartAnalysis = () => {
+        setIsProcessing(true);
+        // Simulate async API call for AI layout analysis
+        setTimeout(() => {
+          setIsProcessing(false);
+          setStep(3); // Go to template selection
+        }, 1500);
+      };
+
+      const toggleTemplate = (id) => {
+        setSelectedTemplateId(prev => prev === id ? null : id);
+      };
+
+      // --- Render Helpers ---
+      const getActiveStyle = () => {
+        if (!selectedTemplateId) return 'font-sans text-base leading-normal text-gray-900'; // Default
+        const tpl = TEMPLATES.find(t => t.id === selectedTemplateId);
+        return tpl ? tpl.styleClass : '';
+      };
+
+      return (
+        <div className="flex justify-center bg-gray-100 min-h-screen font-sans">
+          {/* Mobile Device Container */}
+          <div className="w-full max-w-[400px] bg-white h-screen shadow-2xl relative overflow-hidden flex flex-col">
+            
+            {/* Top Header */}
+            <header className="flex items-center justify-between px-4 py-3 border-b bg-white z-10 shrink-0">
+              <div className="flex items-center gap-2">
+                <ChevronLeft className="w-6 h-6 text-gray-700 cursor-pointer" />
+                <span className="font-medium text-lg">愉快的旅行</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="p-1 rounded bg-gray-100 text-gray-500 text-xs px-2 flex items-center gap-1">
+                   <span className="w-2 h-2 rounded-full bg-green-500"></span> 保存成功
+                </div>
+                <MoreHorizontal className="w-6 h-6 text-gray-700 cursor-pointer" />
+              </div>
+            </header>
+
+            {/* Main Document Content Area */}
+            <div className={`flex-1 overflow-y-auto p-4 transition-all duration-300 ${step === 3 ? 'h-[50vh] pb-48' : ''}`}>
+              {text ? (
+                <div className={`whitespace-pre-wrap transition-all duration-500 ${getActiveStyle()}`}>
+                  {text}
+                </div>
+              ) : (
+                <div className="text-gray-400 mt-4 h-full flex flex-col items-center justify-center">
+                  <p>文档空白，尝试输入或粘贴内容</p>
+                </div>
+              )}
+            </div>
+
+            {/* --- Floating Action: Simulate Paste (For Demo Purposes) --- */}
+            {step === 0 && !text && (
+              <button 
+                onClick={handleSimulatePaste}
+                className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-2 hover:bg-blue-700 active:scale-95 transition-all"
+              >
+                <ClipboardPaste className="w-5 h-5" />
+                <span>模拟粘贴长文本</span>
+              </button>
+            )}
+
+            {/* ==================== STEP 1: Intercept Dialog ==================== */}
+            {step === 1 && (
+              <div className="absolute inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl p-6 w-[85%] shadow-xl transform animate-in fade-in zoom-in duration-200">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-4 text-purple-600">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-bold mb-2">检测到长文本粘贴</h3>
+                    <p className="text-gray-500 text-sm mb-6">
+                      这段文本看起来有些杂乱，是否需要AI为您一键排版美化？
+                    </p>
+                    <div className="flex w-full gap-3">
+                      <button 
+                        onClick={handleCancelBeautify}
+                        className="flex-1 py-2.5 rounded-lg bg-gray-100 text-gray-700 font-medium hover:bg-gray-200"
+                      >
+                        暂不需要
+                      </button>
+                      <button 
+                        onClick={handleConfirmBeautify}
+                        className="flex-1 py-2.5 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700"
+                      >
+                        一键排版
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ==================== STEP 2: Preference Selection (Bottom Sheet) ==================== */}
+            {step === 2 && (
+              <>
+                <div className="absolute inset-0 bg-black/40 z-40 transition-opacity" onClick={handleCancelBeautify} />
+                <div className="absolute bottom-0 left-0 right-0 bg-gray-50 rounded-t-3xl z-50 h-[80vh] flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.1)] animate-in slide-in-from-bottom duration-300">
+                  {/* Sheet Header */}
+                  <div className="flex items-center justify-between px-5 py-4 shrink-0 bg-white rounded-t-3xl border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                      <span className="font-bold text-lg">AI 智能排版</span>
+                    </div>
+                    <button onClick={handleCancelBeautify} className="p-1 text-gray-400 hover:text-gray-600">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  {/* Sheet Content (Scrollable) */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="bg-purple-50/50 text-purple-800 text-sm p-3 rounded-xl mb-2 flex items-center gap-2">
+                      <span className="text-xl">💡</span> 
+                      <span>需求收到，请选择您的排版偏好，我将为您精准梳理。</span>
+                    </div>
+
+                    {PREFERENCE_CATEGORIES.map(category => (
+                      <div key={category.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-50">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3">{category.title}</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {category.options.map(opt => {
+                            const isSelected = selectedPrefs[category.id] === opt;
+                            return (
+                              <button
+                                key={opt}
+                                onClick={() => togglePreference(category.id, opt)}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all
+                                  ${isSelected 
+                                    ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+                                    : 'bg-gray-100 text-gray-600 border border-transparent hover:bg-gray-200'
+                                  }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Sheet Footer */}
+                  <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+                    <button
+                      onClick={handleStartAnalysis}
+                      disabled={isProcessing}
+                      className="w-full bg-purple-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-200 flex items-center justify-center gap-2 disabled:opacity-70 transition-all active:scale-[0.98]"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>正在深度分析并生成模版...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-5 h-5" />
+                          <span>开始智能排版</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ==================== STEP 3: Template Selection (Half Screen) ==================== */}
+            {step === 3 && (
+              <div className="absolute bottom-0 left-0 right-0 h-[55vh] bg-white shadow-[0_-5px_30px_rgba(0,0,0,0.15)] flex flex-col animate-in slide-in-from-bottom duration-300 z-40 rounded-t-3xl border-t border-gray-200">
+                {/* Template Header */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+                   <div className="flex items-center gap-2">
+                      <span className="font-bold text-lg text-gray-800">AI排版美化</span>
+                    </div>
+                    <button onClick={() => setStep(0)} className="p-1 text-gray-400 hover:text-gray-600">
+                      <X className="w-6 h-6" />
+                    </button>
+                </div>
+                
+                <div className="px-5 py-3 bg-gray-50 text-sm text-gray-600 shrink-0 border-b border-gray-100">
+                  针对文本内容与您的偏好选择，推荐以下模版 (点击预览，再次点击取消)：
+                </div>
+
+                {/* Template List */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-8">
+                  {TEMPLATES.map(tpl => {
+                    const isSelected = selectedTemplateId === tpl.id;
+                    return (
+                      <div 
+                        key={tpl.id}
+                        onClick={() => toggleTemplate(tpl.id)}
+                        className={`relative flex gap-4 p-4 rounded-xl cursor-pointer transition-all duration-200 border-2 
+                          ${isSelected ? 'border-purple-500 bg-purple-50/30' : 'border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        {/* Visual Preview Box */}
+                        <div className="w-20 h-24 bg-white border border-gray-200 rounded shrink-0 shadow-sm flex flex-col p-1 overflow-hidden pointer-events-none">
+                          <div className="h-2 w-3/4 bg-gray-300 rounded-full mb-1"></div>
+                          <div className="h-1 w-full bg-gray-200 rounded-full mb-1"></div>
+                          <div className="h-1 w-5/6 bg-gray-200 rounded-full mb-1"></div>
+                          <div className="h-1 w-full bg-gray-200 rounded-full mb-1"></div>
+                          <div className="flex-1 flex items-center justify-center font-bold text-gray-300 text-xl font-serif">
+                            A
+                          </div>
+                        </div>
+
+                        {/* Template Info */}
+                        <div className="flex-1 flex flex-col justify-center">
+                          <h4 className="text-base font-bold text-gray-800 mb-1">{tpl.name}</h4>
+                          <p className="text-xs text-gray-500 leading-relaxed">{tpl.desc}</p>
+                        </div>
+
+                        {/* Checkmark Overlay */}
+                        {isSelected && (
+                          <div className="absolute top-3 right-3 text-purple-600 bg-white rounded-full">
+                            <CheckCircle2 className="w-6 h-6 fill-current" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      );
+    }
+
+    // 将 React 组件挂载到根节点
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<AILayoutDemo />);
+  </script>
+</body>
+</html>
